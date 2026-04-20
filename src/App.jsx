@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, Edit2, LogOut } from 'lucide-react';
+import { Trash2, Edit2, LogOut, AlertCircle } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
+
+const boyImg = "boy.png";
+const girlImg = "girl.png";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDwGPjTtIVuiq1aGVmxTqxLjAelgGTwML8",
@@ -22,11 +25,18 @@ export default function App() {
   const [amount, setAmount] = useState('');
   const [stickers, setStickers] = useState([]);
   const [allBets, setAllBets] = useState([]);
+  const [loginError, setLoginError] = useState('');
+  const [voteError, setVoteError] = useState('');
+  const [forceLogin, setForceLogin] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setTimeout(() => setMounted(true), 100);
+  }, []);
 
   useEffect(() => {
     const betsRef = collection(db, 'bets');
-    
-    const unsubscribeDb = onSnapshot(betsRef, 
+    const unsubscribeDb = onSnapshot(betsRef,
       (snapshot) => {
         const betsData = [];
         snapshot.forEach((doc) => {
@@ -37,7 +47,6 @@ export default function App() {
       },
       (error) => console.error("讀取資料庫失敗:", error)
     );
-
     return () => unsubscribeDb();
   }, []);
 
@@ -50,29 +59,37 @@ export default function App() {
   const totalAmount = allBets.reduce((sum, bet) => sum + Number(bet.amount), 0);
   const boyAmount = allBets.filter(b => b.gender === 'boy').reduce((sum, bet) => sum + Number(bet.amount), 0);
   const girlAmount = allBets.filter(b => b.gender === 'girl').reduce((sum, bet) => sum + Number(bet.amount), 0);
+  const boyCount = allBets.filter(b => b.gender === 'boy').length;
+  const girlCount = allBets.filter(b => b.gender === 'girl').length;
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (!inputName.trim()) return;
-    
-    if (allBets.some(bet => bet.name === inputName.trim())) {
-      const confirmLogin = window.confirm(`"${inputName.trim()}" 已經有人使用且下注了。這是你本人嗎？`);
-      if (!confirmLogin) return;
+    setLoginError('');
+    const trimmedName = inputName.trim();
+    if (!trimmedName) return;
+
+    if (!forceLogin && allBets.some(bet => bet.name === trimmedName)) {
+      setLoginError(`「${trimmedName}」已經有人下注囉！如果是你本人請再次點擊登入，否則請更換暱稱。`);
+      setForceLogin(true);
+      return;
     }
 
-    setCurrentUser(inputName.trim());
-    localStorage.setItem('genderReveal_userName', inputName.trim());
+    setCurrentUser(trimmedName);
+    localStorage.setItem('genderReveal_userName', trimmedName);
+    setForceLogin(false);
   };
 
   const handleLogout = () => {
     setCurrentUser('');
     setInputName('');
+    setLoginError('');
     localStorage.removeItem('genderReveal_userName');
   };
 
   const handleVote = async (gender, e) => {
+    setVoteError('');
     if (!amount || Number(amount) <= 0) {
-      alert('請輸入有效的下注金額');
+      setVoteError('請輸入大於 0 的下注金額');
       return;
     }
 
@@ -81,7 +98,7 @@ export default function App() {
     setStickers(prev => [...prev, newSticker]);
     setTimeout(() => {
       setStickers(prev => prev.filter(s => s.id !== newSticker.id));
-    }, 1000);
+    }, 1200);
 
     try {
       const docRef = doc(db, 'bets', currentUser);
@@ -94,7 +111,7 @@ export default function App() {
       setAmount('');
     } catch (error) {
       console.error("寫入失敗:", error);
-      alert("寫入失敗，請重試");
+      setVoteError("網路異常，寫入失敗請重試");
     }
   };
 
@@ -103,7 +120,7 @@ export default function App() {
       const docRef = doc(db, 'bets', currentUser);
       await deleteDoc(docRef);
     } catch (error) {
-       console.error("刪除失敗:", error);
+      console.error("刪除失敗:", error);
     }
   };
 
@@ -114,122 +131,497 @@ export default function App() {
     }
   };
 
-  // 登入畫面
+  // 畫面 1：登入畫面
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4 font-sans text-amber-950">
-        <div className="bg-white p-8 rounded-[2rem] border-4 border-amber-200 shadow-xl w-full max-w-md text-center">
-          <h1 className="text-3xl font-black mb-6 tracking-wide text-amber-800">
-            寶寶性別預測
-          </h1>
-          <form onSubmit={handleLogin} className="space-y-6">
-            <input
-              type="text"
-              placeholder="請輸入姓名或暱稱"
-              value={inputName}
-              onChange={(e) => setInputName(e.target.value)}
-              className="w-full p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl text-lg font-bold text-center text-amber-900 placeholder-amber-400 focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-100 transition-all"
-              required
-            />
-            <button 
-              type="submit" 
-              className="w-full bg-red-500 hover:bg-red-600 text-white font-black py-4 rounded-2xl text-xl border-b-4 border-red-700 active:border-b-0 active:translate-y-1 transition-all"
-            >
-              進入活動
-            </button>
-          </form>
+      <div style={{
+        minHeight: '100vh',
+        background: '#faf9f7',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '20px',
+        fontFamily: "'Noto Sans TC', 'SF Pro Display', -apple-system, sans-serif",
+      }}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap');
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          input::placeholder { color: #b8b0a8; }
+          input:focus { outline: none; }
+        `}</style>
+
+        <div style={{
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+          transition: 'all 0.6s cubic-bezier(0.23, 1, 0.32, 1)',
+          width: '100%',
+          maxWidth: '400px',
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: '24px',
+            padding: '48px 36px 40px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04), 0 12px 40px rgba(0,0,0,0.04)',
+            border: '1px solid rgba(0,0,0,0.04)',
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '16px',
+              marginBottom: '32px',
+            }}>
+              <div style={{
+                width: '72px', height: '72px', borderRadius: '50%',
+                background: 'linear-gradient(145deg, #e8f0fe, #d4e4fc)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(100,149,237,0.15)',
+              }}>
+                <img src={boyImg} alt="Boy" style={{ width: '52px', height: '52px', objectFit: 'contain' }} />
+              </div>
+              <div style={{
+                width: '72px', height: '72px', borderRadius: '50%',
+                background: 'linear-gradient(145deg, #fde8ef, #fcd4e2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(236,100,150,0.15)',
+              }}>
+                <img src={girlImg} alt="Girl" style={{ width: '52px', height: '52px', objectFit: 'contain' }} />
+              </div>
+            </div>
+
+            <h1 style={{
+              textAlign: 'center',
+              fontSize: '22px',
+              fontWeight: 700,
+              color: '#2c2825',
+              marginBottom: '6px',
+              letterSpacing: '1px',
+            }}>是林底迪還是林美眉</h1>
+            <p style={{
+              textAlign: 'center',
+              fontSize: '13px',
+              color: '#9e958c',
+              marginBottom: '36px',
+              fontWeight: 400,
+            }}>賠率1:1!!!!!</p>
+
+            <form onSubmit={handleLogin}>
+              <input
+                type="text"
+                placeholder="請輸入姓名或暱稱"
+                value={inputName}
+                onChange={(e) => {
+                  setInputName(e.target.value);
+                  setForceLogin(false);
+                  setLoginError('');
+                }}
+                required
+                style={{
+                  width: '100%',
+                  padding: '16px 20px',
+                  background: '#f6f4f1',
+                  border: '1.5px solid transparent',
+                  borderRadius: '14px',
+                  fontSize: '16px',
+                  textAlign: 'center',
+                  color: '#2c2825',
+                  transition: 'all 0.2s',
+                  marginBottom: loginError ? '0' : '16px',
+                }}
+                onFocus={(e) => {
+                  e.target.style.border = '1.5px solid #c8bfb6';
+                  e.target.style.background = '#fff';
+                }}
+                onBlur={(e) => {
+                  e.target.style.border = '1.5px solid transparent';
+                  e.target.style.background = '#f6f4f1';
+                }}
+              />
+              {loginError && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '6px',
+                  marginTop: '10px',
+                  marginBottom: '16px',
+                  padding: '10px 14px',
+                  background: '#fef2f2',
+                  borderRadius: '10px',
+                  fontSize: '13px',
+                  color: '#c53030',
+                  lineHeight: 1.5,
+                }}>
+                  <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <span>{loginError}</span>
+                </div>
+              )}
+              <button
+                type="submit"
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  background: '#2c2825',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '14px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  letterSpacing: '0.5px',
+                }}
+                onMouseEnter={(e) => e.target.style.background = '#3d3835'}
+                onMouseLeave={(e) => e.target.style.background = '#2c2825'}
+              >
+                {forceLogin ? '是我本人，進入活動' : '進入活動'}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     );
   }
 
-  // 主畫面
+  // 畫面 2：主畫面
+  const boyPct = totalAmount ? Math.round((boyAmount / totalAmount) * 100) : 50;
+  const girlPct = totalAmount ? Math.round((girlAmount / totalAmount) * 100) : 50;
+
   return (
-    <div className="min-h-screen bg-amber-50 p-4 md:p-8 font-sans text-amber-950 relative overflow-hidden">
+    <div style={{
+      minHeight: '100vh',
+      background: '#faf9f7',
+      padding: '16px',
+      fontFamily: "'Noto Sans TC', 'SF Pro Display', -apple-system, sans-serif",
+      color: '#2c2825',
+      position: 'relative',
+      overflowX: 'hidden',
+    }}>
       <style>{`
-        @keyframes floatUp {
-          0% { transform: translateY(0) scale(0.5); opacity: 1; }
-          100% { transform: translateY(-150px) scale(1.5); opacity: 0; }
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        input::placeholder { color: #b8b0a8; }
+        input:focus { outline: none; }
+
+        @keyframes floatUpFade {
+          0% { transform: translateY(0) scale(0.8) rotate(0deg); opacity: 1; }
+          50% { transform: translateY(-90px) scale(1.1) rotate(8deg); opacity: 0.8; }
+          100% { transform: translateY(-200px) scale(1.3) rotate(-4deg); opacity: 0; }
         }
         .animate-float {
-          animation: floatUp 1s ease-out forwards;
+          animation: floatUpFade 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
           pointer-events: none;
           position: fixed;
           z-index: 50;
         }
+
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        .bet-row {
+          transition: all 0.15s ease;
+        }
+        .bet-row:hover {
+          background: #f0eeeb !important;
+        }
+
+        @media (min-width: 768px) {
+          .main-layout { flex-direction: row !important; }
+          .left-col { flex: 1 !important; }
+          .right-col { width: 320px !important; }
+        }
       `}</style>
 
       {stickers.map((sticker) => (
-        <div key={sticker.id} className="animate-float text-4xl" style={{ left: sticker.x, top: sticker.y }}>
-          {sticker.gender === 'boy' ? '👦🏻' : '👧🏻'}
-        </div>
+        <img
+          key={sticker.id}
+          src={sticker.gender === 'boy' ? boyImg : girlImg}
+          alt="floating sticker"
+          className="animate-float"
+          style={{
+            left: sticker.x,
+            top: sticker.y,
+            width: '56px',
+            height: '56px',
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.12))',
+          }}
+        />
       ))}
 
-      <div className="max-w-5xl mx-auto">
+      <div style={{ maxWidth: '960px', margin: '0 auto' }}>
         {/* 頂部導覽 */}
-        <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-3xl border-4 border-amber-200 shadow-sm">
-          <h1 className="text-xl md:text-2xl font-black text-amber-800 flex items-center gap-2">
-            Hi, {currentUser}
-          </h1>
-          <button onClick={handleLogout} className="text-amber-600 hover:text-red-500 flex items-center gap-1 font-bold bg-amber-50 px-3 py-2 rounded-xl transition-colors">
-            <LogOut size={18} strokeWidth={3} /> <span className="text-sm">登出</span>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '20px',
+          padding: '14px 20px',
+          background: '#fff',
+          borderRadius: '16px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          border: '1px solid rgba(0,0,0,0.04)',
+          animation: 'fadeInUp 0.5s ease both',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{
+              width: '8px', height: '8px', borderRadius: '50%',
+              background: '#6dba73',
+            }} />
+            <span style={{ fontSize: '15px', fontWeight: 600, color: '#2c2825' }}>
+              {currentUser}
+            </span>
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#9e958c', fontSize: '13px', fontWeight: 500,
+              padding: '6px 10px', borderRadius: '8px',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#6b6360'; e.currentTarget.style.background = '#f6f4f1'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#9e958c'; e.currentTarget.style.background = 'none'; }}
+          >
+            <LogOut size={15} /> 登出
           </button>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-6">
-          <div className="flex-1 space-y-6">
-            
-            {/* 總金額區塊 */}
-            <div className="bg-white p-6 rounded-[2rem] border-4 border-amber-200 shadow-sm text-center">
-              <h2 className="text-amber-700 font-bold mb-2">目前累積總獎金</h2>
-              <div className="text-4xl md:text-5xl font-black text-red-500 mb-6 drop-shadow-sm">
-                $ {totalAmount.toLocaleString()}
+        <div className="main-layout" style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+        }}>
+          <div className="left-col" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+            {/* 總金額 */}
+            <div style={{
+              background: '#fff',
+              borderRadius: '24px',
+              padding: '36px 32px 28px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03), 0 8px 30px rgba(0,0,0,0.03)',
+              border: '1px solid rgba(0,0,0,0.04)',
+              animation: 'fadeInUp 0.5s ease 0.1s both',
+            }}>
+              <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+                <p style={{ fontSize: '13px', color: '#9e958c', fontWeight: 500, marginBottom: '8px', letterSpacing: '1px' }}>
+                  目前累積總金額
+                </p>
+                <div style={{
+                  fontSize: '44px', fontWeight: 900, color: '#2c2825',
+                  letterSpacing: '-1px', lineHeight: 1,
+                }}>
+                  ${totalAmount.toLocaleString()}
+                </div>
               </div>
-              
-              <div className="flex h-6 rounded-full overflow-hidden bg-amber-100 border-2 border-amber-200 p-1 gap-1">
-                <div style={{ width: `${totalAmount ? (boyAmount/totalAmount)*100 : 50}%` }} className="bg-sky-400 rounded-full transition-all duration-700 shadow-sm"></div>
-                <div style={{ width: `${totalAmount ? (girlAmount/totalAmount)*100 : 50}%` }} className="bg-rose-400 rounded-full transition-all duration-700 shadow-sm"></div>
+
+              {/* 比例條 */}
+              <div style={{
+                display: 'flex', height: '8px', borderRadius: '99px',
+                overflow: 'hidden', background: '#f0eeeb', marginBottom: '16px',
+              }}>
+                <div style={{
+                  width: `${boyPct}%`,
+                  background: 'linear-gradient(90deg, #6aafe6, #5a9cd6)',
+                  borderRadius: '99px 0 0 99px',
+                  transition: 'width 0.8s cubic-bezier(0.23, 1, 0.32, 1)',
+                }} />
+                <div style={{
+                  width: `${girlPct}%`,
+                  background: 'linear-gradient(90deg, #e88aab, #e06b92)',
+                  borderRadius: '0 99px 99px 0',
+                  transition: 'width 0.8s cubic-bezier(0.23, 1, 0.32, 1)',
+                }} />
               </div>
-              <div className="flex justify-between mt-3 text-sm font-black">
-                <span className="text-sky-700 bg-sky-50 px-3 py-1 rounded-lg border-2 border-sky-100">男生 ${boyAmount.toLocaleString()}</span>
-                <span className="text-rose-700 bg-rose-50 px-3 py-1 rounded-lg border-2 border-rose-100">女生 ${girlAmount.toLocaleString()}</span>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#6aafe6' }} />
+                  <span style={{ fontSize: '13px', color: '#6b6360', fontWeight: 500 }}>
+                    底迪 {boyCount}票 · ${boyAmount.toLocaleString()}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '13px', color: '#6b6360', fontWeight: 500 }}>
+                    美眉 {girlCount}票 · ${girlAmount.toLocaleString()}
+                  </span>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#e88aab' }} />
+                </div>
               </div>
             </div>
 
-            {/* 下注操作區塊 */}
-            <div className="bg-white p-6 md:p-8 rounded-[2rem] border-4 border-amber-200 shadow-sm">
+            {/* 下注操作 */}
+            <div style={{
+              background: '#fff',
+              borderRadius: '24px',
+              padding: '32px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03), 0 8px 30px rgba(0,0,0,0.03)',
+              border: '1px solid rgba(0,0,0,0.04)',
+              animation: 'fadeInUp 0.5s ease 0.2s both',
+            }}>
               {!myBet ? (
-                <div className="space-y-5">
-                  <h3 className="text-xl font-black text-amber-800 mb-4 text-center">預測性別</h3>
-                  <input
-                    type="number"
-                    placeholder="請輸入下注金額"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="w-full p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl text-xl font-bold text-center text-amber-900 placeholder-amber-400 focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-100 transition-all"
-                  />
-                  <div className="flex gap-4 pt-2">
-                    <button onClick={(e) => handleVote('boy', e)} className="flex-1 bg-sky-100 text-sky-800 border-4 border-sky-300 font-black py-5 rounded-[2rem] text-xl flex flex-col items-center justify-center border-b-8 active:border-b-4 active:translate-y-1 transition-all">
-                      <span className="text-4xl mb-2 drop-shadow-sm">👦🏻</span> 男生
+                <div>
+                  <h3 style={{
+                    fontSize: '17px', fontWeight: 700, color: '#2c2825',
+                    textAlign: 'center', marginBottom: '24px',
+                  }}>選一邊下注</h3>
+
+                  <div style={{ position: 'relative', marginBottom: '20px' }}>
+                    <span style={{
+                      position: 'absolute', left: '18px', top: '50%', transform: 'translateY(-50%)',
+                      fontSize: '18px', fontWeight: 700, color: '#c8bfb6',
+                    }}>$</span>
+                    <input
+                      type="number"
+                      placeholder="輸入金額"
+                      value={amount}
+                      onChange={(e) => { setAmount(e.target.value); setVoteError(''); }}
+                      style={{
+                        width: '100%',
+                        padding: '18px 20px 18px 38px',
+                        background: '#f6f4f1',
+                        border: '1.5px solid transparent',
+                        borderRadius: '14px',
+                        fontSize: '18px',
+                        fontWeight: 600,
+                        color: '#2c2825',
+                        textAlign: 'center',
+                        transition: 'all 0.2s',
+                      }}
+                      onFocus={(e) => { e.target.style.border = '1.5px solid #c8bfb6'; e.target.style.background = '#fff'; }}
+                      onBlur={(e) => { e.target.style.border = '1.5px solid transparent'; e.target.style.background = '#f6f4f1'; }}
+                    />
+                  </div>
+
+                  {voteError && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                      marginBottom: '16px', fontSize: '13px', color: '#c53030',
+                      padding: '8px 12px', background: '#fef2f2', borderRadius: '10px',
+                    }}>
+                      <AlertCircle size={14} /> {voteError}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '14px' }}>
+                    {/* 修改開始 */}
+                    <button
+                      onClick={(e) => handleVote('boy', e)}
+                      style={{
+                        flex: 1,
+                        background: '#fff',
+                        border: '2px solid #d4e4fc',
+                        borderRadius: '20px',
+                        padding: '28px 16px 24px',
+                        cursor: 'pointer',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#eef4fd';
+                        e.currentTarget.style.borderColor = '#9ec5f0';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(100,149,237,0.15)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#fff';
+                        e.currentTarget.style.borderColor = '#d4e4fc';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <img src={boyImg} alt="男生" style={{ width: '64px', height: '64px', objectFit: 'contain', marginBottom: '12px' }} />
+                      <span style={{ fontWeight: 700, fontSize: '15px', color: '#5a9cd6', letterSpacing: '1px' }}>底迪</span>
                     </button>
-                    <button onClick={(e) => handleVote('girl', e)} className="flex-1 bg-rose-100 text-rose-800 border-4 border-rose-300 font-black py-5 rounded-[2rem] text-xl flex flex-col items-center justify-center border-b-8 active:border-b-4 active:translate-y-1 transition-all">
-                      <span className="text-4xl mb-2 drop-shadow-sm">👧🏻</span> 女生
+
+                    <button
+                      onClick={(e) => handleVote('girl', e)}
+                      style={{
+                        flex: 1,
+                        background: '#fff',
+                        border: '2px solid #fcd4e2',
+                        borderRadius: '20px',
+                        padding: '28px 16px 24px',
+                        cursor: 'pointer',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#fdf0f4';
+                        e.currentTarget.style.borderColor = '#f0a0be';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(236,100,150,0.15)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#fff';
+                        e.currentTarget.style.borderColor = '#fcd4e2';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <img src={girlImg} alt="女生" style={{ width: '64px', height: '64px', objectFit: 'contain', marginBottom: '12px' }} />
+                      <span style={{ fontWeight: 700, fontSize: '15px', color: '#e06b92', letterSpacing: '1px' }}>美眉</span>
                     </button>
+                    {/* 修改結束 */}
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-6">
-                  <h3 className="text-amber-700 font-bold mb-4 text-lg">你的預測結果</h3>
-                  <div className={`inline-block px-8 py-4 rounded-[2rem] text-2xl font-black mb-8 border-4 shadow-sm ${myBet.gender === 'boy' ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
-                    {myBet.gender === 'boy' ? '👦🏻 男生' : '👧🏻 女生'} <br/> 
-                    <span className="text-3xl mt-2 block">${myBet.amount.toLocaleString()}</span>
+                <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                  <p style={{ fontSize: '13px', color: '#9e958c', fontWeight: 500, marginBottom: '20px' }}>你的預測</p>
+                  <div style={{
+                    display: 'inline-flex', flexDirection: 'column', alignItems: 'center',
+                    padding: '24px 48px',
+                    borderRadius: '20px',
+                    marginBottom: '28px',
+                    border: `2px solid ${myBet.gender === 'boy' ? '#d4e4fc' : '#fcd4e2'}`,
+                    background: myBet.gender === 'boy' ? '#f5f9fe' : '#fef5f8',
+                  }}>
+                    <img
+                      src={myBet.gender === 'boy' ? boyImg : girlImg}
+                      alt="預測"
+                      style={{ width: '52px', height: '52px', objectFit: 'contain', marginBottom: '10px' }}
+                    />
+                    <span style={{
+                      fontWeight: 700, fontSize: '15px',
+                      color: myBet.gender === 'boy' ? '#5a9cd6' : '#e06b92',
+                    }}>
+                      {myBet.gender === 'boy' ? '預測底迪' : '預測美眉'}
+                    </span>
+                    <span style={{
+                      fontSize: '28px', fontWeight: 900, marginTop: '4px',
+                      color: myBet.gender === 'boy' ? '#4a8bc6' : '#d05a82',
+                    }}>
+                      ${myBet.amount.toLocaleString()}
+                    </span>
                   </div>
-                  <div className="flex justify-center gap-4">
-                    <button onClick={handleEditBet} className="flex-1 flex items-center justify-center gap-2 px-4 py-4 bg-amber-100 text-amber-800 border-2 border-amber-200 rounded-2xl hover:bg-amber-200 font-bold active:scale-95 transition-all">
-                      <Edit2 size={20} strokeWidth={3} /> 修改金額
+
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={handleEditBet}
+                      style={{
+                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        padding: '14px 16px', background: '#f6f4f1', border: 'none',
+                        borderRadius: '14px', cursor: 'pointer', fontWeight: 600,
+                        fontSize: '14px', color: '#6b6360', transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#edeae6'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = '#f6f4f1'}
+                    >
+                      <Edit2 size={16} /> 修改
                     </button>
-                    <button onClick={handleDeleteBet} className="flex-1 flex items-center justify-center gap-2 px-4 py-4 bg-red-100 text-red-600 border-2 border-red-200 rounded-2xl hover:bg-red-200 font-bold active:scale-95 transition-all">
-                      <Trash2 size={20} strokeWidth={3} /> 重新下注
+                    <button
+                      onClick={handleDeleteBet}
+                      style={{
+                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        padding: '14px 16px', background: '#fef2f2', border: 'none',
+                        borderRadius: '14px', cursor: 'pointer', fontWeight: 600,
+                        fontSize: '14px', color: '#c53030', transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#fde8e8'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = '#fef2f2'}
+                    >
+                      <Trash2 size={16} /> 重新下注
                     </button>
                   </div>
                 </div>
@@ -237,24 +629,80 @@ export default function App() {
             </div>
           </div>
 
-          {/* 英雄榜 */}
-          <div className="w-full md:w-1/3 bg-white p-6 rounded-[2rem] border-4 border-amber-200 shadow-sm h-fit">
-            <h3 className="text-xl font-black text-amber-800 mb-5 flex items-center gap-2 pb-3 border-b-4 border-amber-100">
-              英雄榜
-            </h3>
-            <div className="space-y-3">
+          {/* 賭盤 */}
+          <div className="right-col" style={{
+            width: '100%',
+            background: '#fff',
+            borderRadius: '24px',
+            padding: '28px 24px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03), 0 8px 30px rgba(0,0,0,0.03)',
+            border: '1px solid rgba(0,0,0,0.04)',
+            alignSelf: 'flex-start',
+            animation: 'fadeInUp 0.5s ease 0.3s both',
+          }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              marginBottom: '20px',
+            }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#2c2825' }}>
+                所有預測
+              </h3>
+              <span style={{
+                fontSize: '12px', fontWeight: 600, color: '#9e958c',
+                background: '#f6f4f1', padding: '4px 10px', borderRadius: '99px',
+              }}>
+                {allBets.length} 人
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {allBets.length === 0 ? (
-                <p className="text-amber-500 font-bold text-center py-8 bg-amber-50 rounded-2xl border-2 border-dashed border-amber-200">
-                  目前還沒有紀錄
+                <p style={{
+                  color: '#b8b0a8', fontSize: '14px', textAlign: 'center',
+                  padding: '40px 0',
+                }}>
+                  還沒有人下注
                 </p>
               ) : (
-                allBets.map(bet => (
-                  <div key={bet.name} className="flex justify-between items-center p-3 px-4 rounded-2xl bg-amber-50 border-2 border-amber-200 transition-transform hover:scale-105">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl filter drop-shadow-sm">{bet.gender === 'boy' ? '👦🏻' : '👧🏻'}</span>
-                      <span className="font-black text-amber-900">{bet.name}</span>
+                allBets.map((bet, i) => (
+                  <div
+                    key={bet.name}
+                    className="bet-row"
+                    style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '12px 14px',
+                      borderRadius: '14px',
+                      background: bet.name === currentUser ? '#f8f6f3' : 'transparent',
+                      animation: `fadeInUp 0.4s ease ${0.05 * i}s both`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <img
+                        src={bet.gender === 'boy' ? boyImg : girlImg}
+                        alt="icon"
+                        style={{
+                          width: '32px', height: '32px', objectFit: 'contain',
+                          filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.08))',
+                        }}
+                      />
+                      <span style={{
+                        fontWeight: bet.name === currentUser ? 700 : 500,
+                        fontSize: '14px',
+                        color: '#2c2825',
+                      }}>
+                        {bet.name}
+                        {bet.name === currentUser && (
+                          <span style={{
+                            fontSize: '11px', marginLeft: '6px',
+                            color: '#9e958c', fontWeight: 400,
+                          }}>（你）</span>
+                        )}
+                      </span>
                     </div>
-                    <span className={`font-black text-lg ${bet.gender === 'boy' ? 'text-sky-600' : 'text-rose-600'}`}>
+                    <span style={{
+                      fontWeight: 700, fontSize: '14px',
+                      color: bet.gender === 'boy' ? '#5a9cd6' : '#e06b92',
+                    }}>
                       ${bet.amount.toLocaleString()}
                     </span>
                   </div>
