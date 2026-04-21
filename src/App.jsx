@@ -29,6 +29,24 @@ export default function App() {
   const [voteError, setVoteError] = useState('');
   const [forceLogin, setForceLogin] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const CLOSE_TIME = new Date('2026-04-25T17:00:00+08:00').getTime();
+  const isClosed = now >= CLOSE_TIME;
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getCountdown = () => {
+    const diff = CLOSE_TIME - now;
+    if (diff <= 0) return null;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    return { days, hours, minutes, seconds };
+  };
 
   useEffect(() => {
     setTimeout(() => setMounted(true), 100);
@@ -88,8 +106,13 @@ export default function App() {
 
   const handleVote = async (gender, e) => {
     setVoteError('');
-    if (!amount || Number(amount) <= 0) {
-      setVoteError('請輸入大於 0 的下注金額');
+    if (isClosed) {
+      setVoteError('已收盤，無法下注');
+      return;
+    }
+    const numAmount = Number(amount);
+    if (!amount || numAmount < 100 || numAmount > 1000) {
+      setVoteError('下注金額限 100 ~ 1,000 元');
       return;
     }
 
@@ -116,6 +139,7 @@ export default function App() {
   };
 
   const handleDeleteBet = async () => {
+    if (isClosed) return;
     try {
       const docRef = doc(db, 'bets', currentUser);
       await deleteDoc(docRef);
@@ -125,13 +149,13 @@ export default function App() {
   };
 
   const handleEditBet = () => {
+    if (isClosed) return;
     if (myBet) {
       setAmount(myBet.amount.toString());
       handleDeleteBet();
     }
   };
 
-  // 畫面 1：登入畫面
   if (!currentUser) {
     return (
       <div style={{
@@ -203,6 +227,37 @@ export default function App() {
               marginBottom: '36px',
               fontWeight: 400,
             }}>賠率1:1!!!!!</p>
+
+            {(() => {
+              const countdown = getCountdown();
+              return (
+                <div style={{
+                  textAlign: 'center',
+                  marginBottom: '28px',
+                  padding: '12px 16px',
+                  background: isClosed ? '#fef2f2' : '#f6f4f1',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  color: isClosed ? '#c53030' : '#9e958c',
+                  fontWeight: 500,
+                  lineHeight: 1.6,
+                }}>
+                  {isClosed ? (
+                    <span>已收盤，僅供查看</span>
+                  ) : (
+                    <>
+                      <div>收盤時間：4/25（六）17:00</div>
+                      {countdown && (
+                        <div style={{ marginTop: '4px', fontWeight: 700, fontSize: '14px', color: '#6b6360' }}>
+                          {countdown.days > 0 && `${countdown.days}天 `}
+                          {String(countdown.hours).padStart(2,'0')}:{String(countdown.minutes).padStart(2,'0')}:{String(countdown.seconds).padStart(2,'0')}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             <form onSubmit={handleLogin}>
               <input
@@ -451,6 +506,44 @@ export default function App() {
               </div>
             </div>
 
+            <div style={{
+              padding: '14px 20px',
+              borderRadius: '16px',
+              background: isClosed ? '#fef2f2' : '#fff',
+              border: `1px solid ${isClosed ? '#fcd4d4' : 'rgba(0,0,0,0.04)'}`,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              animation: 'fadeInUp 0.5s ease 0.15s both',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '8px', height: '8px', borderRadius: '50%',
+                  background: isClosed ? '#e53e3e' : '#6dba73',
+                }} />
+                <span style={{
+                  fontSize: '13px', fontWeight: 600,
+                  color: isClosed ? '#c53030' : '#6b6360',
+                }}>
+                  {isClosed ? '已收盤' : '收盤 4/25（六）17:00'}
+                </span>
+              </div>
+              {!isClosed && (() => {
+                const countdown = getCountdown();
+                if (!countdown) return null;
+                return (
+                  <span style={{
+                    fontSize: '14px', fontWeight: 700, color: '#2c2825',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>
+                    {countdown.days > 0 && `${countdown.days}天 `}
+                    {String(countdown.hours).padStart(2,'0')}:{String(countdown.minutes).padStart(2,'0')}:{String(countdown.seconds).padStart(2,'0')}
+                  </span>
+                );
+              })()}
+            </div>
+
             {/* 下注操作 */}
             <div style={{
               background: '#fff',
@@ -460,12 +553,21 @@ export default function App() {
               border: '1px solid rgba(0,0,0,0.04)',
               animation: 'fadeInUp 0.5s ease 0.2s both',
             }}>
-              {!myBet ? (
+              {isClosed && !myBet ? (
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
+                  <p style={{ fontSize: '16px', fontWeight: 700, color: '#2c2825', marginBottom: '6px' }}>已收盤</p>
+                  <p style={{ fontSize: '13px', color: '#9e958c' }}>下注時間已截止，等待開獎吧！</p>
+                </div>
+              ) : !myBet ? (
                 <div>
                   <h3 style={{
                     fontSize: '17px', fontWeight: 700, color: '#2c2825',
-                    textAlign: 'center', marginBottom: '24px',
+                    textAlign: 'center', marginBottom: '6px',
                   }}>選一邊下注</h3>
+                  <p style={{
+                    fontSize: '12px', color: '#b8b0a8', textAlign: 'center', marginBottom: '24px',
+                  }}>下注金額 $100 ~ $1,000</p>
 
                   <div style={{ position: 'relative', marginBottom: '20px' }}>
                     <span style={{
@@ -474,8 +576,10 @@ export default function App() {
                     }}>$</span>
                     <input
                       type="number"
-                      placeholder="輸入金額"
+                      placeholder="100 ~ 1,000"
                       value={amount}
+                      min={100}
+                      max={1000}
                       onChange={(e) => { setAmount(e.target.value); setVoteError(''); }}
                       style={{
                         width: '100%',
@@ -505,7 +609,6 @@ export default function App() {
                   )}
 
                   <div style={{ display: 'flex', gap: '14px' }}>
-                    {/* 修改開始 */}
                     <button
                       onClick={(e) => handleVote('boy', e)}
                       style={{
@@ -563,7 +666,6 @@ export default function App() {
                       <img src={girlImg} alt="女生" style={{ width: '64px', height: '64px', objectFit: 'contain', marginBottom: '12px' }} />
                       <span style={{ fontWeight: 700, fontSize: '15px', color: '#e06b92', letterSpacing: '1px' }}>美眉</span>
                     </button>
-                    {/* 修改結束 */}
                   </div>
                 </div>
               ) : (
@@ -597,6 +699,16 @@ export default function App() {
                   </div>
 
                   <div style={{ display: 'flex', gap: '10px' }}>
+                    {isClosed ? (
+                      <div style={{
+                        flex: 1, textAlign: 'center', padding: '14px 16px',
+                        background: '#f6f4f1', borderRadius: '14px',
+                        fontSize: '13px', color: '#b8b0a8', fontWeight: 500,
+                      }}>
+                        🔒 已收盤，無法修改
+                      </div>
+                    ) : (
+                    <>
                     <button
                       onClick={handleEditBet}
                       style={{
@@ -623,6 +735,8 @@ export default function App() {
                     >
                       <Trash2 size={16} /> 重新下注
                     </button>
+                    </>
+                    )}
                   </div>
                 </div>
               )}
