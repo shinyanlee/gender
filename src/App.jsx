@@ -564,7 +564,7 @@ export default function App() {
                   <h3 style={{
                     fontSize: '17px', fontWeight: 700, color: '#2c2825',
                     textAlign: 'center', marginBottom: '6px',
-                  }}>選一邊下注</h3>
+                  }}>下注(先輸入金額再選底迪或美眉)</h3>
                   <p style={{
                     fontSize: '12px', color: '#b8b0a8', textAlign: 'center', marginBottom: '24px',
                   }}>下注金額 $100 ~ $1,000</p>
